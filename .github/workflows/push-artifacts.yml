@@ -63,25 +63,8 @@ jobs:
           python .github/scripts/import-release-fonts.py \
             --archives "$archive_dir" \
             --destination fonts
+          cp -a fonts "$RUNNER_TEMP/imported-fonts"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install FontBakery
-        run: python -m pip install fontbakery
-
-      - name: Check fonts with FontBakery
-        shell: bash
-        run: |
-          mapfile -d '' font_files < <(find fonts -type f -iname '*.ttf' -print0 | sort -z)
-          if [ "${#font_files[@]}" -eq 0 ]; then
-            echo "No TTF files were imported." >&2
-            exit 1
-          fi
-          fontbakery check-googlefonts "${font_files[@]}"
 
       - name: Create or update release PR
         id: cpr
@@ -96,4 +79,22 @@ jobs:
           body: |
             Import the font files from the upstream HackGen release `${{ steps.release.outputs.tag }}`.
 
-            FontBakery checks run before this pull request is created or updated.
+            FontBakery checks run after this pull request is created or updated.
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FontBakery
+        run: python -m pip install fontbakery
+
+      - name: Check fonts with FontBakery
+        shell: bash
+        run: |
+          mapfile -d '' font_files < <(find "$RUNNER_TEMP/imported-fonts" -type f -iname '*.ttf' -print0 | sort -z)
+          if [ "${#font_files[@]}" -eq 0 ]; then
+            echo "No TTF files were imported." >&2
+            exit 1
+          fi
+          fontbakery check-googlefonts "${font_files[@]}"
