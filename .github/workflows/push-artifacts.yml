@@ -91,7 +91,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install FontBakery
-        run: python -m pip install fontbakery
+        run: python -m pip install "fontbakery[googlefonts]"
 
       - name: Check fonts with FontBakery
         shell: bash
