@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import shutil
 import tarfile
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -47,7 +48,7 @@ def target_for(filename: str, destination: Path) -> Path:
         raise ValueError(f"Invalid font weight in filename: {filename}")
 
     extension = source.suffix.lower().lstrip(".")
-    return destination / family / extension / f"{family}-{weight}.{extension}"
+    return destination / family / extension / source.name
 
 
 def main():
@@ -65,8 +66,10 @@ def main():
         raise SystemExit(f"No supported archives found in {args.archives}")
 
     args.destination.mkdir(parents=True, exist_ok=True)
-    for existing in args.destination.rglob("*"):
-        if existing.is_file() and existing.suffix.lower() in FONT_FORMATS:
+    for existing in args.destination.iterdir():
+        if existing.is_dir() and not existing.is_symlink():
+            shutil.rmtree(existing)
+        else:
             existing.unlink()
 
     written = {}
