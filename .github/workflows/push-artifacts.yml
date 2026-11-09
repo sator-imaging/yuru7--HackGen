@@ -74,8 +74,12 @@ jobs:
           base: master
           branch: automation/update-hackgen-fonts
           delete-branch: true
-          title: "Update HackGen fonts to ${{ steps.release.outputs.tag }}"
+          title: "[bot] Update HackGen fonts to ${{ steps.release.outputs.tag }}"
           commit-message: "Update HackGen fonts to ${{ steps.release.outputs.tag }}"
+          author-name: github-actions[bot]
+          author-email: 41898282+github-actions[bot]@users.noreply.github.com
+          committer-name: github-actions[bot]
+          committer-email: 41898282+github-actions[bot]@users.noreply.github.com
           body: |
             Import the font files from the upstream HackGen release `${{ steps.release.outputs.tag }}`.
 
