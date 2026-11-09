@@ -116,4 +116,34 @@ jobs:
             echo "No changed TTF files to check."
             exit 0
           fi
-          fontbakery check-googlefonts "${font_files[@]}"
+
+          log_dir="$RUNNER_TEMP/fontbakery-logs"
+          mkdir -p "$log_dir"
+          export log_dir
+          check_font() {
+            font="$1"
+            log="$log_dir/$(basename "$font").log"
+            status=0
+            fontbakery check-googlefonts "$font" > "$log" 2>&1 || status=$?
+            echo "$font $status" >> "$log_dir/results"
+          }
+          export -f check_font
+
+          printf '%s\0' "${font_files[@]}" \
+            | xargs -0 -n 1 -P "$(nproc)" bash -c 'check_font "$0"' || true
+
+          failed=0
+          for font in "${font_files[@]}"; do
+            log="$log_dir/$(basename "$font").log"
+            {
+              echo "### ${font#"$RUNNER_TEMP/changed-fonts/"}"
+              echo '```'
+              cat "$log"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            cat "$log"
+          done
+          if grep -qv ' 0$' "$log_dir/results"; then
+            failed=1
+          fi
+          exit "$failed"
