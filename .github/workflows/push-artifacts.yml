@@ -20,8 +20,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  import-and-check:
+  import:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      fonts: ${{ steps.release.outputs.fonts }}
     steps:
       - name: Check out master
         uses: actions/checkout@v4
@@ -76,6 +79,8 @@ jobs:
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
+          fonts="$(cd "$changed_dir" && find . -type f -iname '*.ttf' | sed 's|^\./||' | sort | jq -R . | jq -sc .)"
+          echo "fonts=$fonts" >> "$GITHUB_OUTPUT"
 
       - name: Create or update release PR
         id: cpr
@@ -97,53 +102,49 @@ jobs:
 
             FontBakery checks run after this pull request is created or updated.
 
-      - name: Set up Python
+      - name: Upload changed fonts
         if: steps.release.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: changed-fonts
+          path: ${{ runner.temp }}/changed-fonts
+          retention-days: 1
+
+  check-fonts:
+    needs: import
+    if: needs.import.outputs.fonts != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        font: ${{ fromJSON(needs.import.outputs.fonts) }}
+    steps:
+      - name: Download changed fonts
+        uses: actions/download-artifact@v4
+        with:
+          name: changed-fonts
+          path: changed-fonts
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install FontBakery
-        if: steps.release.outputs.changed == 'true'
         run: python -m pip install "fontbakery[googlefonts]"
 
-      - name: Check fonts with FontBakery
-        if: steps.release.outputs.changed == 'true'
+      - name: Check font with FontBakery
         shell: bash
+        env:
+          FONT: ${{ matrix.font }}
         run: |
-          mapfile -d '' font_files < <(find "$RUNNER_TEMP/changed-fonts" -type f -iname '*.ttf' -print0 | sort -z)
-          if [ "${#font_files[@]}" -eq 0 ]; then
-            echo "No changed TTF files to check."
-            exit 0
-          fi
-
-          log_dir="$RUNNER_TEMP/fontbakery-logs"
-          mkdir -p "$log_dir"
-          export log_dir
-          check_font() {
-            font="$1"
-            log="$log_dir/$(basename "$font").log"
-            status=0
-            fontbakery check-googlefonts "$font" > "$log" 2>&1 || status=$?
-            echo "$font $status" >> "$log_dir/results"
-          }
-          export -f check_font
-
-          printf '%s\0' "${font_files[@]}" \
-            | xargs -0 -n 1 -P "$(nproc)" bash -c 'check_font "$0"' || true
-
-          failed=0
-          for font in "${font_files[@]}"; do
-            log="$log_dir/$(basename "$font").log"
-            {
-              echo "### ${font#"$RUNNER_TEMP/changed-fonts/"}"
-              echo '```'
-              cat "$log"
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            cat "$log"
-          done
-          if grep -qv ' 0$' "$log_dir/results"; then
-            failed=1
-          fi
-          exit "$failed"
+          status=0
+          fontbakery check-googlefonts "changed-fonts/$FONT" > fontbakery.log 2>&1 || status=$?
+          cat fontbakery.log
+          {
+            echo "### $FONT"
+            echo '```'
+            cat fontbakery.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
