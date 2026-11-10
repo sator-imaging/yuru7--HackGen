@@ -1,14 +1,14 @@
-name: Push upstream font artifacts
+name: Merge Upstream Artifacts
 
 on:
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       release_tag:
         description: Upstream release tag, or "latest"
-        required: false
         default: latest
+        required: false
         type: string
 
 permissions:
@@ -115,7 +115,7 @@ jobs:
     if: needs.import.outputs.fonts != '[]'
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         font: ${{ fromJSON(needs.import.outputs.fonts) }}
     steps:
