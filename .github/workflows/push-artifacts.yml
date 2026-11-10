@@ -20,8 +20,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  import-and-check:
+  import:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      fonts: ${{ steps.release.outputs.fonts }}
     steps:
       - name: Check out master
         uses: actions/checkout@v4
@@ -63,11 +66,25 @@ jobs:
           python .github/scripts/import-release-fonts.py \
             --archives "$archive_dir" \
             --destination fonts
-          cp -a fonts "$RUNNER_TEMP/imported-fonts"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          git add --intent-to-add fonts
+          changed_dir="$RUNNER_TEMP/changed-fonts"
+          mkdir -p "$changed_dir"
+          git diff --name-only --diff-filter=AMR -z -- fonts \
+            | grep -zi '\.ttf$' \
+            | xargs -0 -r cp --parents -t "$changed_dir" || true
+          if [ -n "$(git status --porcelain -- fonts)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          fonts="$(cd "$changed_dir" && find . -type f -iname '*.ttf' | sed 's|^\./||' | sort | jq -R . | jq -sc .)"
+          echo "fonts=$fonts" >> "$GITHUB_OUTPUT"
 
       - name: Create or update release PR
         id: cpr
+        if: steps.release.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ github.token }}
@@ -85,6 +102,29 @@ jobs:
 
             FontBakery checks run after this pull request is created or updated.
 
+      - name: Upload changed fonts
+        if: steps.release.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: changed-fonts
+          path: ${{ runner.temp }}/changed-fonts
+          retention-days: 1
+
+  check-fonts:
+    needs: import
+    if: needs.import.outputs.fonts != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        font: ${{ fromJSON(needs.import.outputs.fonts) }}
+    steps:
+      - name: Download changed fonts
+        uses: actions/download-artifact@v4
+        with:
+          name: changed-fonts
+          path: changed-fonts
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -93,12 +133,18 @@ jobs:
       - name: Install FontBakery
         run: python -m pip install "fontbakery[googlefonts]"
 
-      - name: Check fonts with FontBakery
+      - name: Check font with FontBakery
         shell: bash
+        env:
+          FONT: ${{ matrix.font }}
         run: |
-          mapfile -d '' font_files < <(find "$RUNNER_TEMP/imported-fonts" -type f -iname '*.ttf' -print0 | sort -z)
-          if [ "${#font_files[@]}" -eq 0 ]; then
-            echo "No TTF files were imported." >&2
-            exit 1
-          fi
-          fontbakery check-googlefonts "${font_files[@]}"
+          status=0
+          fontbakery check-googlefonts "changed-fonts/$FONT" > fontbakery.log 2>&1 || status=$?
+          cat fontbakery.log
+          {
+            echo "### $FONT"
+            echo '```'
+            cat fontbakery.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
