@@ -6,7 +6,7 @@ import zipfile
 from pathlib import Path
 
 
-IMPORTER = Path(__file__).resolve().parents[1] / ".github/scripts/import-release-fonts.py"
+IMPORTER = Path(__file__).resolve().parents[1] / "scripts/import-release-fonts.py"
 
 
 class ImportReleaseFontsTest(unittest.TestCase):
