@@ -25,6 +25,7 @@ jobs:
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       fonts: ${{ steps.release.outputs.fonts }}
+      changed: ${{ steps.release.outputs.changed }}
     steps:
       - name: Check out master
         uses: actions/checkout@v4
@@ -150,8 +151,8 @@ jobs:
           exit "$status"
 
   release:
-    needs: [import, check-fonts]
-    if: ${{ !cancelled() && needs.import.outputs.changed == 'true' && (needs.check-fonts.result == 'success' || needs.check-fonts.result == 'skipped') }}
+    needs: import
+    if: needs.import.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Download changed fonts
