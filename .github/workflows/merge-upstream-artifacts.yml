@@ -72,7 +72,7 @@ jobs:
           changed_dir="$RUNNER_TEMP/changed-fonts"
           mkdir -p "$changed_dir"
           git diff --name-only --diff-filter=AMR -z -- fonts \
-            | grep -zi '\.ttf$' \
+            | grep -ziE '\.(ttf|otf|ttc|otc|woff2?)$' \
             | xargs -0 -r cp --parents -t "$changed_dir" || true
           if [ -n "$(git status --porcelain -- fonts)" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -148,3 +148,31 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
+
+  release:
+    needs: [import, check-fonts]
+    if: ${{ !cancelled() && needs.import.outputs.changed == 'true' && (needs.check-fonts.result == 'success' || needs.check-fonts.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download changed fonts
+        uses: actions/download-artifact@v4
+        with:
+          name: changed-fonts
+          path: changed-fonts
+
+      - name: Create GitHub release with font files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.import.outputs.tag }}
+          UPSTREAM_REPOSITORY: yuru7/HackGen
+        run: |
+          mapfile -d '' -t assets < <(find changed-fonts -type f -print0 | sort -z)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No changed font files are available to attach" >&2
+            exit 1
+          fi
+
+          gh release create "$RELEASE_TAG" "${assets[@]}" \
+            --title "HackGen $RELEASE_TAG" \
+            --notes "Font files imported from https://github.com/$UPSTREAM_REPOSITORY/releases/tag/$RELEASE_TAG." \
+            --target master
