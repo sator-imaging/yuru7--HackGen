@@ -173,11 +173,7 @@ jobs:
             exit 1
           fi
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-          else
-            gh release create "$RELEASE_TAG" "${assets[@]}" \
-              --title "HackGen $RELEASE_TAG" \
-              --notes "Font files imported from https://github.com/$UPSTREAM_REPOSITORY/releases/tag/$RELEASE_TAG." \
-              --target master
-          fi
+          gh release create "$RELEASE_TAG" "${assets[@]}" \
+            --verify-tag \
+            --title "HackGen $RELEASE_TAG" \
+            --notes "Font files imported from https://github.com/$UPSTREAM_REPOSITORY/releases/tag/$RELEASE_TAG."
